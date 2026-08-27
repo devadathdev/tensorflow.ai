@@ -28,7 +28,7 @@ augmentation:
 
 # Model configuration
 model:
-  type: "cnn"  # "cnn" or "transfer_learning"
+  type: "cnn"  # "cnn", "transfer_learning", "detection", "segmentation", "ocr"
   architecture: "custom_cnn"  # For transfer learning: "mobilenetv2", "efficientnetb0", "efficientnetv2b0", "resnet50"
   num_classes: null  # Auto-detected from dataset
   input_shape: [224, 224, 3]
@@ -57,6 +57,31 @@ model:
     backbone_trainable: false
     fine_tune_at: null  # Layer index to start fine-tuning from
     pooling: "avg"  # "avg" or "max"
+  
+  # Object detection configuration
+  detection:
+    backbone_trainable: false
+    num_anchors: 9
+    max_detections: 100
+    nms_iou_threshold: 0.5
+    score_threshold: 0.3
+  
+  # Segmentation configuration
+  segmentation:
+    decoder: "unet"  # "unet", "deeplabv3plus", "fpn"
+    backbone_trainable: false
+    output_stride: 16
+    atrous_rates: [6, 12, 18]
+  
+  # OCR configuration
+  ocr:
+    backbone_trainable: false
+    rnn_layers: 2
+    rnn_units: 256
+    rnn_type: "lstm"  # "lstm" or "gru"
+    bidirectional: true
+    ctc_merge_repeated: true
+    detector_backbone: "mobilenetv3_small"
 
 # Training configuration
 training:

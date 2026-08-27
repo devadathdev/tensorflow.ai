@@ -1,0 +1,55 @@
+# TensorVision AI - GPU Docker Image
+# For training with NVIDIA GPU support
+
+FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
+    build-essential \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgl1-mesa-glx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python3.11 -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install TensorFlow with GPU support
+RUN pip install --no-cache-dir tensorflow[and-cuda]==2.15.0
+
+# Copy application code
+COPY src/ ./src/
+COPY config.yaml .
+COPY serve.py .
+COPY predict.py .
+COPY evaluate.py .
+COPY train.py .
+
+# Create directories for data, models, logs
+RUN mkdir -p data/train data/val data/test models logs/tensorboard logs/csv
+
+# Expose API port
+EXPOSE 8000
+
+# Environment variables
+ENV TF_CPP_MIN_LOG_LEVEL=2
+ENV PYTHONUNBUFFERED=1
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+
+# Default command
+CMD ["python", "serve.py"]

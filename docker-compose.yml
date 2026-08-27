@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  tensorvision-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tensorvision-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - TENSORVISION_EPOCHS=50
+      - TENSORVISION_BATCH_SIZE=32
+      - TENSORVISION_LEARNING_RATE=0.001
+      - TENSORVISION_MODEL_DIR=/app/models
+      - TENSORVISION_USE_GPU=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  tensorvision-train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tensorvision-train
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - TENSORVISION_EPOCHS=50
+      - TENSORVISION_BATCH_SIZE=32
+      - TENSORVISION_LEARNING_RATE=0.001
+      - TENSORVISION_MODEL_DIR=/app/models
+      - TENSORVISION_USE_GPU=true
+    command: python train.py --epochs 50
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  tensorvision-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: tensorvision-gpu
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - TENSORVISION_EPOCHS=50
+      - TENSORVISION_BATCH_SIZE=32
+      - TENSORVISION_LEARNING_RATE=0.001
+      - TENSORVISION_MODEL_DIR=/app/models
+      - TENSORVISION_USE_GPU=true
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  tensorboard:
+    image: tensorflow/tensorflow:latest
+    container_name: tensorvision-tensorboard
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./logs/tensorboard:/logs
+    command: tensorboard --logdir=/logs --host=0.0.0.0 --port=6006
+    restart: unless-stopped

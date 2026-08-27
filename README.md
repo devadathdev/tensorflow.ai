@@ -13,6 +13,11 @@ End-to-end image classification platform built with TensorFlow/Keras. Transform 
 - **Model Management**: Versioned model storage with metadata
 - **Inference Engine**: Single and batch prediction with confidence scores
 - **REST API**: FastAPI service with `/predict`, `/predict/batch`, `/health`, `/model` endpoints
+- **Docker Support**: Multi-stage builds, GPU support, docker-compose for production
+- **TensorFlow Lite**: Model conversion with quantization (dynamic, full integer) for edge deployment
+- **Object Detection**: SSD-style detection with multiple backbones
+- **Semantic Segmentation**: U-Net, DeepLabV3+, FPN decoders
+- **OCR**: CRNN (CNN+RNN+CTC) for text recognition, DBNet for text detection
 
 ## Architecture
 
@@ -24,18 +29,24 @@ tensorflow-ai/
 ├── src/
 │   ├── config.py         # Configuration management
 │   ├── data/             # Dataset, preprocessing, augmentation
-│   ├── models/           # CNN, transfer learning, factory
+│   ├── models/           # CNN, transfer learning, detection, segmentation, OCR, factory
 │   ├── training/         # Trainer, callbacks
 │   ├── evaluation/       # Metrics, evaluator
-│   ├── inference/        # Engine, predictor
+│   ├── inference/        # Engine, predictor, TFLite engine
 │   └── api/              # FastAPI server
 ├── tests/                # Unit and integration tests
 ├── config.yaml           # Configuration
 ├── requirements.txt      # Dependencies
 ├── train.py              # Training CLI
-├── predict.py            # Inference CLI
+├── predict.py            # Inference CLI (Keras)
+├── predict_tflite.py     # Inference CLI (TensorFlow Lite)
 ├── evaluate.py           # Evaluation CLI
-└── serve.py              # API server CLI
+├── serve.py              # API server CLI
+├── convert_tflite.py     # TFLite conversion CLI
+├── Dockerfile            # CPU Docker image
+├── Dockerfile.gpu        # GPU Docker image
+├── docker-compose.yml    # Multi-service deployment
+└── .dockerignore         # Docker ignore patterns
 ```
 
 ## Installation
@@ -175,6 +186,45 @@ Supported backbones:
 - InceptionV3, Xception
 - DenseNet121, DenseNet169, DenseNet201
 
+### Object Detection
+SSD-style single-shot detector with multi-scale feature pyramid.
+Supported backbones:
+- MobileNetV2, MobileNetV3 (Small/Large)
+- EfficientNet B0-B3
+- ResNet50, ResNet101, ResNet50V2
+
+Features:
+- Multi-scale detection (3 feature levels)
+- Configurable anchor boxes
+- Non-maximum suppression
+- Focal loss for class imbalance
+- Smooth L1 loss for box regression
+
+### Semantic Segmentation
+Three decoder architectures:
+- **U-Net**: Classic encoder-decoder with skip connections
+- **DeepLabV3+**: Atrous Spatial Pyramid Pooling (ASPP) + decoder
+- **FPN**: Feature Pyramid Network for multi-scale segmentation
+
+Supported backbones:
+- MobileNetV2, MobileNetV3 (Small/Large)
+- EfficientNet B0-B3
+- ResNet50, ResNet101, ResNet50V2
+
+Loss functions: Cross-entropy + Dice coefficient
+
+### OCR (Optical Character Recognition)
+Two-model pipeline:
+1. **Text Detector (DBNet)**: Differentiable Binarization for text localization
+2. **Text Recognizer (CRNN)**: CNN + BiLSTM/GRU + CTC loss
+
+Features:
+- Character-level and word-level recognition
+- CTC (Connectionist Temporal Classification) loss
+- Greedy and beam search decoding
+- Supports custom character sets
+- Input shape: 32x256 (height x width)
+
 ## Testing
 
 ```bash
@@ -203,10 +253,10 @@ docker run -p 8000:8000 -v $(pwd)/models:/app/models tensorvision
 
 ## Roadmap
 
-- [ ] Phase 1: MVP (Core pipeline) ✓
-- [ ] Phase 2: Advanced ML (Augmentation, transfer learning, TensorBoard)
-- [ ] Phase 3: Deployment (API, Docker, TensorFlow Lite)
-- [ ] Phase 4: Platform Expansion (Detection, segmentation, OCR)
+- [x] Phase 1: MVP (Core pipeline) ✓
+- [x] Phase 2: Advanced ML (Augmentation, transfer learning, TensorBoard) ✓
+- [x] Phase 3: Deployment (API, Docker, TensorFlow Lite) ✓
+- [x] Phase 4: Platform Expansion (Detection, segmentation, OCR) ✓
 
 ## License
 
