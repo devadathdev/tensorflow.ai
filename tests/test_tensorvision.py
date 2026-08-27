@@ -270,5 +270,22 @@ def test_tensorflow_available():
     print(f"TensorFlow version: {tf.__version__}")
 
 
+class TestFactoryConfigNormalization:
+    """Regression tests for full-config and section-config inputs."""
+
+    def test_create_model_accepts_full_config(self):
+        model = create_model(3, {
+            'model': {'type': 'transfer_learning', 'architecture': 'mobilenetv2'}
+        })
+        assert isinstance(model, TransferLearningModel)
+
+    def test_compile_model_accepts_full_config(self):
+        model = CustomCNN(num_classes=3)
+        compiled = compile_model(model, {
+            'training': {'learning_rate': 2e-4, 'optimizer': 'adam'}
+        })
+        assert float(compiled.optimizer.learning_rate.numpy()) == pytest.approx(2e-4)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
