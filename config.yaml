@@ -1,0 +1,126 @@
+# TensorVision AI Configuration
+# All training and model parameters configurable here
+
+# Dataset configuration
+dataset:
+  train_dir: "data/train"
+  val_dir: "data/val"
+  test_dir: "data/test"
+  image_size: [224, 224]
+  batch_size: 32
+  supported_formats: [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
+  shuffle_buffer: 1000
+  cache_dataset: true
+  prefetch_buffer: 32
+
+# Data augmentation configuration
+augmentation:
+  enabled: true
+  horizontal_flip: true
+  vertical_flip: false
+  rotation_factor: 0.1
+  zoom_factor: 0.1
+  width_shift_factor: 0.1
+  height_shift_factor: 0.1
+  brightness_factor: 0.2
+  contrast_factor: 0.2
+  seed: 42
+
+# Model configuration
+model:
+  type: "cnn"  # "cnn" or "transfer_learning"
+  architecture: "custom_cnn"  # For transfer learning: "mobilenetv2", "efficientnetb0", "efficientnetv2b0", "resnet50"
+  num_classes: null  # Auto-detected from dataset
+  input_shape: [224, 224, 3]
+  dropout_rate: 0.3
+  l2_regularization: 1e-4
+  
+  # Custom CNN architecture
+  custom_cnn:
+    conv_blocks:
+      - filters: 32
+        kernel_size: 3
+        pool_size: 2
+      - filters: 64
+        kernel_size: 3
+        pool_size: 2
+      - filters: 128
+        kernel_size: 3
+        pool_size: 2
+      - filters: 256
+        kernel_size: 3
+        pool_size: 2
+    dense_units: [512, 256]
+  
+  # Transfer learning configuration
+  transfer_learning:
+    backbone_trainable: false
+    fine_tune_at: null  # Layer index to start fine-tuning from
+    pooling: "avg"  # "avg" or "max"
+
+# Training configuration
+training:
+  epochs: 50
+  learning_rate: 1e-3
+  optimizer: "adam"  # "adam", "sgd", "rmsprop"
+  loss: "sparse_categorical_crossentropy"
+  metrics: ["accuracy"]
+  early_stopping:
+    enabled: true
+    patience: 10
+    monitor: "val_loss"
+    mode: "min"
+    restore_best_weights: true
+  reduce_lr_on_plateau:
+    enabled: true
+    factor: 0.5
+    patience: 5
+    min_lr: 1e-6
+  model_checkpoint:
+    enabled: true
+    monitor: "val_accuracy"
+    mode: "max"
+    save_best_only: true
+
+# Model output configuration
+output:
+  model_dir: "models"
+  model_name: "tensorvision_model"
+  version_format: "v{version:03d}"
+  save_format: "tf"  # "tf" or "h5"
+  include_optimizer: true
+
+# Logging configuration
+logging:
+  tensorboard:
+    enabled: true
+    log_dir: "logs/tensorboard"
+    histogram_freq: 1
+    write_graph: true
+    write_images: false
+  csv_logger:
+    enabled: true
+    log_dir: "logs/csv"
+  console:
+    level: "INFO"
+
+# Inference configuration
+inference:
+  confidence_threshold: 0.5
+  top_k: 5
+  batch_size: 32
+
+# API configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  max_file_size: 10485760  # 10MB
+  allowed_extensions: [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
+  workers: 1
+  timeout: 30
+
+# Hardware configuration
+hardware:
+  use_gpu: true
+  mixed_precision: false
+  xla_compile: false
