@@ -81,7 +81,7 @@ def main():
     print('=' * 60)
     print(f"Task: {config.get('model.type', 'cnn')}")
 
-    dataset = create_dataset_from_config(config)
+    dataset = create_dataset_from_config()
     validation = dataset.validate_dataset()
     if not validation['valid']:
         print('Dataset validation failed:')
@@ -107,7 +107,7 @@ def main():
         print(f"\nResuming from: {args.resume}")
         model = tf.keras.models.load_model(args.resume)
 
-    augmentation = create_augmentation_pipeline(config.augmentation)
+    augmentation = create_augmentation_pipeline()
     print('\nStarting training...')
     train_model(
         model=model,
