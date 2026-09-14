@@ -1,25 +1,21 @@
 """API routes for TensorVision AI."""
 
-import os
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Depends
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-import numpy as np
-from PIL import Image
 import io
 
-from src.inference.engine import InferenceEngine
+from fastapi import APIRouter, File, UploadFile, HTTPException, Form, Depends
+from pydantic import BaseModel, Field
+from PIL import Image
+
+from src.inference.engine import InferenceEngine, create_inference_engine
 from src.config import get_config
 
 router = APIRouter()
-
 engine: Optional[InferenceEngine] = None
 
 
 class PredictionResponse(BaseModel):
-    """Single prediction response."""
     prediction: str
     confidence: float
     model_version: str
@@ -30,13 +26,11 @@ class PredictionResponse(BaseModel):
 
 
 class BatchPredictionResponse(BaseModel):
-    """Batch prediction response."""
     predictions: List[PredictionResponse]
     total: int
 
 
 class ModelInfoResponse(BaseModel):
-    """Model information response."""
     model_version: str
     num_classes: int
     class_names: List[str]
@@ -46,7 +40,6 @@ class ModelInfoResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
     status: str
     model_loaded: bool
     model_version: Optional[str] = None
@@ -59,126 +52,127 @@ def get_engine() -> InferenceEngine:
     return engine
 
 
-@router.get("/health", response_model=HealthResponse)
+def _validate_options(top_k: Optional[int], confidence_threshold: Optional[float]) -> None:
+    if top_k is not None and top_k < 1:
+        raise HTTPException(status_code=400, detail="top_k must be >= 1")
+    if confidence_threshold is not None and not 0 <= confidence_threshold <= 1:
+        raise HTTPException(status_code=400, detail="confidence_threshold must be between 0 and 1")
+
+
+@router.get('/health', response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint."""
     return HealthResponse(
-        status="healthy" if engine is not None else "unhealthy",
+        status='healthy' if engine is not None else 'unhealthy',
         model_loaded=engine is not None,
-        model_version=engine.model_version if engine else None
+        model_version=engine.model_version if engine else None,
     )
 
 
-@router.get("/model", response_model=ModelInfoResponse)
+@router.get('/model', response_model=ModelInfoResponse)
 async def get_model_info(eng: InferenceEngine = Depends(get_engine)):
-    """Get model information."""
-    info = eng.get_model_info()
-    return ModelInfoResponse(**info)
+    return ModelInfoResponse(**eng.get_model_info())
 
 
-@router.post("/predict", response_model=PredictionResponse)
+@router.post('/predict', response_model=PredictionResponse)
 async def predict(
     file: UploadFile = File(...),
     top_k: Optional[int] = Form(None),
     confidence_threshold: Optional[float] = Form(None),
     return_probabilities: bool = Form(True),
-    eng: InferenceEngine = Depends(get_engine)
+    eng: InferenceEngine = Depends(get_engine),
 ):
-    """Predict class for a single uploaded image."""
+    """Predict a class without mutating shared engine state."""
+    _validate_options(top_k, confidence_threshold)
     await _validate_file(file)
-    
     contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
-    image = image.convert('RGB')
-    
-    original_top_k = eng.top_k
-    original_threshold = eng.confidence_threshold
-    
-    if top_k is not None:
-        eng.top_k = top_k
-    if confidence_threshold is not None:
-        eng.confidence_threshold = confidence_threshold
-    
     try:
-        result = eng.predict(image, return_probabilities=return_probabilities)
-    finally:
-        eng.top_k = original_top_k
-        eng.confidence_threshold = original_threshold
-    
+        image = Image.open(io.BytesIO(contents)).convert('RGB')
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f'Invalid image file: {exc}') from exc
+
+    config = dict(eng.config)
+    if top_k is not None:
+        config['top_k'] = top_k
+    if confidence_threshold is not None:
+        config['confidence_threshold'] = confidence_threshold
+
+    result = InferenceEngine(
+        model=eng.model,
+        class_names=eng.class_names,
+        preprocessing=eng.preprocessing,
+        config=config,
+        model_version=eng.model_version,
+        model_metadata=eng.model_metadata,
+    ).predict(image, return_probabilities=return_probabilities)
     return PredictionResponse(**result)
 
 
-@router.post("/predict/batch", response_model=BatchPredictionResponse)
+@router.post('/predict/batch', response_model=BatchPredictionResponse)
 async def predict_batch(
     files: List[UploadFile] = File(...),
     top_k: Optional[int] = Form(None),
     confidence_threshold: Optional[float] = Form(None),
     return_probabilities: bool = Form(True),
-    eng: InferenceEngine = Depends(get_engine)
+    eng: InferenceEngine = Depends(get_engine),
 ):
-    """Predict classes for multiple uploaded images."""
+    """Predict multiple images without mutating shared engine state."""
+    _validate_options(top_k, confidence_threshold)
+    if not files:
+        raise HTTPException(status_code=400, detail='At least one file is required')
     if len(files) > 100:
-        raise HTTPException(status_code=400, detail="Maximum 100 files per batch")
-    
+        raise HTTPException(status_code=400, detail='Maximum 100 files per batch')
+
     images = []
     for file in files:
         await _validate_file(file)
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        image = image.convert('RGB')
-        images.append(image)
-    
-    original_top_k = eng.top_k
-    original_threshold = eng.confidence_threshold
-    
+        try:
+            images.append(Image.open(io.BytesIO(contents)).convert('RGB'))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f'Invalid image file: {exc}') from exc
+
+    config = dict(eng.config)
     if top_k is not None:
-        eng.top_k = top_k
+        config['top_k'] = top_k
     if confidence_threshold is not None:
-        eng.confidence_threshold = confidence_threshold
-    
-    try:
-        results = eng.predict_batch(images, return_probabilities=return_probabilities)
-    finally:
-        eng.top_k = original_top_k
-        eng.confidence_threshold = original_threshold
-    
+        config['confidence_threshold'] = confidence_threshold
+
+    request_engine = InferenceEngine(
+        model=eng.model,
+        class_names=eng.class_names,
+        preprocessing=eng.preprocessing,
+        config=config,
+        model_version=eng.model_version,
+        model_metadata=eng.model_metadata,
+    )
+    results = request_engine.predict_batch(images, return_probabilities=return_probabilities)
     return BatchPredictionResponse(
-        predictions=[PredictionResponse(**r) for r in results],
-        total=len(results)
+        predictions=[PredictionResponse(**result) for result in results],
+        total=len(results),
     )
 
 
 async def _validate_file(file: UploadFile):
-    """Validate uploaded file."""
+    """Validate upload extension, size, and image integrity."""
     api_config = get_config().api
-    
-    if file.size and file.size > api_config.get('max_file_size', 10485760):
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size: {api_config.get('max_file_size', 10485760)} bytes"
-        )
-    
+    max_size = api_config.get('max_file_size', 10485760)
     allowed_extensions = api_config.get('allowed_extensions', ['.jpg', '.jpeg', '.png', '.bmp', '.webp'])
-    file_ext = Path(file.filename).suffix.lower()
-    
-    if file_ext not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file format. Allowed: {allowed_extensions}"
-        )
-    
+
+    filename = file.filename or ''
+    if Path(filename).suffix.lower() not in allowed_extensions:
+        raise HTTPException(status_code=400, detail=f'Unsupported file format. Allowed: {allowed_extensions}')
+
+    contents = await file.read()
+    await file.seek(0)
+    if len(contents) > max_size:
+        raise HTTPException(status_code=413, detail=f'File too large. Maximum size: {max_size} bytes')
     try:
-        contents = await file.read()
-        await file.seek(0)
         Image.open(io.BytesIO(contents)).verify()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f'Invalid image file: {exc}') from exc
 
 
-def initialize_engine(
-    model_path: str,
-    class_names: Optional[List[str]] = None
-) -> InferenceEngine:
+def initialize_engine(model_path: str, class_names: Optional[List[str]] = None) -> InferenceEngine:
     """Initialize the global inference engine."""
     global engine
     engine = create_inference_engine(model_path, class_names)
