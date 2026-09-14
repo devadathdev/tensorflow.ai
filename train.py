@@ -7,7 +7,7 @@ import tensorflow as tf
 from src.config import get_config
 from src.data.dataset import create_dataset_from_config,create_segmentation_dataset,create_ocr_dataset,create_detection_dataset
 from src.data.augmentation import create_augmentation_pipeline
-from src.models.factory import create_model,get_model_info,compile_model,compile_detection_model,compile_segmentation_model,compile_ocr_model
+from src.models.factory import create_model,get_model_info
 from src.training.trainer import Trainer,train_model
 from src.tasks import SUPPORTED_TASKS,requires_annotations
 
@@ -25,40 +25,34 @@ def setup_gpu(config):
     if h.get('mixed_precision',False): tf.keras.mixed_precision.set_global_policy('mixed_float16')
     if h.get('xla_compile',False): tf.config.optimizer.set_jit(True)
 
-def _path(cfg,key,split):
-    value=cfg.get(key)
-    if isinstance(value,dict): return value.get(split)
-    return value
+def _split_value(value,split):
+    return value.get(split) if isinstance(value,dict) else value
 
 def structured_training(config,task):
-    d=config.dataset; m=config.model; t=config.training; ann_key=f'{task}_annotations'; spec=d.get(ann_key)
-    if not spec: raise ValueError(f"Task '{task}' requires dataset.{ann_key}")
+    d=config.dataset; m=dict(config.model); t=config.training; spec=d.get(f'{task}_annotations')
+    if not spec: raise ValueError(f"Task '{task}' requires dataset.{task}_annotations")
     if task=='segmentation':
-        def pair(split):
-            s=spec.get(split,{}) if isinstance(spec,dict) else {}
-            return s.get('images'),s.get('masks')
+        if not isinstance(spec,dict): raise ValueError('Segmentation annotations must define train/val/test image and mask directories')
+        def pair(s): x=spec.get(s,{}) or {}; return x.get('images'),x.get('masks')
         tr_i,tr_m=pair('train'); va_i,va_m=pair('val'); te_i,te_m=pair('test')
         if not tr_i or not tr_m or not va_i or not va_m: raise ValueError('Segmentation requires train/val images and masks')
-        n=int(m.get('num_classes') or spec.get('num_classes',2)); size=tuple(m.get('input_shape',[256,256,3])[:2]); bs=d.get('batch_size',8)
+        n=int(m.get('num_classes') or spec.get('num_classes',2)); m['num_classes']=n; m['architecture']=m.get('architecture') if m.get('architecture') in {'mobilenetv2','mobilenetv3_small','mobilenetv3_large','efficientnetb0','efficientnetb1','efficientnetb2','efficientnetb3','resnet50','resnet101','resnet50v2'} else 'mobilenetv2'; size=tuple(m.get('input_shape',[256,256,3])[:2]); bs=d.get('batch_size',8)
         train_ds=create_segmentation_dataset(tr_i,tr_m,size,bs,n,True); val_ds=create_segmentation_dataset(va_i,va_m,size,bs,n,False); test_ds=create_segmentation_dataset(te_i,te_m,size,bs,n,False) if te_i and te_m else None
-        model=create_model(n,m); compile_segmentation_model(model,t)
     elif task=='ocr':
-        def file(split): return _path(d,ann_key,split) or (spec.get(split) if isinstance(spec,dict) else None)
-        train_file,val_file,test_file=file('train'),file('val'),file('test')
-        if not train_file or not val_file: raise ValueError('OCR requires train/val annotation files')
-        size=tuple(m.get('input_shape',[32,256,3])); oc=m.get('ocr',{}); max_len=int(spec.get('max_length',32)) if isinstance(spec,dict) else 32; root=spec.get('image_root') if isinstance(spec,dict) else None
-        train_ds,charset=create_ocr_dataset(train_file,root,size[:2],d.get('batch_size',16),spec.get('charset') if isinstance(spec,dict) else None,max_len,True); val_ds,_=create_ocr_dataset(val_file,root,size[:2],d.get('batch_size',16),charset,max_len,False); test_ds=create_ocr_dataset(test_file,root,size[:2],d.get('batch_size',16),charset,max_len,False)[0] if test_file else None
-        model=create_model(len(charset)+1,m); compile_ocr_model(model,t)
-    elif task=='detection':
-        def file(split): return _path(d,ann_key,split) or (spec.get(split) if isinstance(spec,dict) else None)
-        train_file,val_file,test_file=file('train'),file('val'),file('test')
-        if not train_file or not val_file: raise ValueError('Detection requires train/val COCO annotation files')
-        train_c=json.load(open(train_file,encoding='utf-8')); cats=sorted(train_c.get('categories',[]),key=lambda x:x['id']); n=int(m.get('num_classes') or len(cats)); size=tuple(m.get('input_shape',[320,320,3]));
-        model=create_model(n,m); slots=int(model.output_shape[0][1]); root=spec.get('image_root') if isinstance(spec,dict) else None
-        train_ds=create_detection_dataset(train_file,root,size[:2],d.get('batch_size',8),n,slots,True); val_ds=create_detection_dataset(val_file,root,size[:2],d.get('batch_size',8),n,slots,False); test_ds=create_detection_dataset(test_file,root,size[:2],d.get('batch_size',8),n,slots,False) if test_file else None; compile_detection_model(model,t)
-    else: raise ValueError(f'Unsupported task: {task}')
-    trainer=Trainer(model,train_ds,val_ds,test_ds,config=t,class_weights=None,task=task)
-    trainer.train(); print('Validation:',trainer.evaluate()); return trainer.model,trainer.history
+        if not isinstance(spec,dict): raise ValueError('OCR annotations must define train/val files')
+        tr,va,te=spec.get('train'),spec.get('val'),spec.get('test');
+        if not tr or not va: raise ValueError('OCR requires train/val annotation files')
+        root=spec.get('image_root'); size=tuple(m.get('input_shape',[32,256,3])); max_len=int(spec.get('max_length',32)); bs=d.get('batch_size',16)
+        train_ds,charset=create_ocr_dataset(tr,root,size[:2],bs,spec.get('charset'),max_len,True); val_ds,_=create_ocr_dataset(va,root,size[:2],bs,charset,max_len,False); test_ds=create_ocr_dataset(te,root,size[:2],bs,charset,max_len,False)[0] if te else None
+        m['num_classes']=len(charset)+1; m['architecture']=m.get('architecture') if m.get('architecture') in {'mobilenetv2','mobilenetv3_small','mobilenetv3_large','efficientnetb0','efficientnetb1'} else 'mobilenetv3_small'
+    else:
+        if not isinstance(spec,dict): raise ValueError('Detection annotations must define train/val COCO files')
+        tr,va,te=spec.get('train'),spec.get('val'),spec.get('test');
+        if not tr or not va: raise ValueError('Detection requires train/val COCO annotation files')
+        with open(tr,encoding='utf-8') as f: coco=json.load(f)
+        cats=sorted(coco.get('categories',[]),key=lambda x:x['id']); n=int(m.get('num_classes') or len(cats)); m['num_classes']=n; m['architecture']=m.get('architecture') if m.get('architecture') in {'mobilenetv2','mobilenetv3_small','mobilenetv3_large','efficientnetb0','efficientnetb1','efficientnetb2','efficientnetb3','resnet50','resnet101','resnet50v2'} else 'mobilenetv2'; size=tuple(m.get('input_shape',[320,320,3])); bs=d.get('batch_size',8); root=spec.get('image_root')
+        model=create_model(n,m); slots=int(model.output_shape[0][1]); train_ds=create_detection_dataset(tr,root,size[:2],bs,n,slots,True); val_ds=create_detection_dataset(va,root,size[:2],bs,n,slots,False); test_ds=create_detection_dataset(te,root,size[:2],bs,n,slots,False) if te else None
+    model=create_model(int(m.get('num_classes')),m); trainer=Trainer(model,train_ds,val_ds,test_ds,t,None,task=task); trainer.compile_model(); trainer.train(); print('Validation:',trainer.evaluate()); return trainer.model,trainer.history
 
 def main():
     p=argparse.ArgumentParser(description='Train TensorVision AI model'); p.add_argument('--config',default='config.yaml'); p.add_argument('--epochs',type=int); p.add_argument('--batch-size',type=int); p.add_argument('--lr',type=float); p.add_argument('--model-type',choices=tuple(SUPPORTED_TASKS)); p.add_argument('--architecture'); p.add_argument('--data-dir'); p.add_argument('--model-dir'); p.add_argument('--resume'); a=p.parse_args(); c=get_config(a.config)
@@ -86,5 +80,5 @@ def main():
         return 1
     stats=ds.get_statistics(); model=create_model(stats['num_classes'],c.model)
     if a.resume:model=tf.keras.models.load_model(a.resume)
-    aug=create_augmentation_pipeline(c.augmentation); train_model(model,ds,c.training,aug.get_layer() if aug.enabled else None); return 0
+    aug=create_augmentation_pipeline(c.augmentation); train_model(model,ds,c.training,aug.get_layer() if aug.enabled else None,task=task); return 0
 if __name__=='__main__':sys.exit(main())
