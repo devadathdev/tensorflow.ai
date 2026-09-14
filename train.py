@@ -76,10 +76,20 @@ def main():
     if args.model_dir: config.set('output.model_dir', args.model_dir)
 
     setup_gpu(config)
+    task = config.get('model.type', 'cnn')
     print('=' * 60)
     print('TensorVision AI - Training')
     print('=' * 60)
-    print(f"Task: {config.get('model.type', 'cnn')}")
+    print(f'Task: {task}')
+
+    if task in {'detection', 'segmentation', 'ocr'}:
+        annotation_dir = config.get(f'dataset.{task}_annotations')
+        if not annotation_dir:
+            print(f"Task '{task}' requires dataset.{task}_annotations; refusing to run with classification labels.", file=sys.stderr)
+            return 2
+        print(f"Task-specific annotations configured at: {annotation_dir}")
+        print('Task-specific annotation adapters are not yet connected to the generic ImageDataset trainer.', file=sys.stderr)
+        return 2
 
     dataset = create_dataset_from_config()
     validation = dataset.validate_dataset()
@@ -109,12 +119,8 @@ def main():
 
     augmentation = create_augmentation_pipeline()
     print('\nStarting training...')
-    train_model(
-        model=model,
-        dataset=dataset,
-        config=config.training,
-        augmentation_pipeline=augmentation.get_layer() if augmentation.enabled else None,
-    )
+    train_model(model=model, dataset=dataset, config=config.training,
+                augmentation_pipeline=augmentation.get_layer() if augmentation.enabled else None)
     print('\nTraining complete!')
     print('=' * 60)
     return 0
