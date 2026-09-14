@@ -11,9 +11,27 @@ dataset:
   shuffle_buffer: 1000
   cache_dataset: true
   prefetch_buffer: 32
-  detection_annotations: null
-  segmentation_annotations: null
-  ocr_annotations: null
+  # Classification uses train/val/test directories above.
+  # Detection: COCO JSON files + image_root.
+  detection_annotations:
+    train: null
+    val: null
+    test: null
+    image_root: "data/detection"
+  # Segmentation: each split has images and masks; filenames must match.
+  segmentation_annotations:
+    num_classes: 2
+    train: {images: "data/segmentation/train/images", masks: "data/segmentation/train/masks"}
+    val: {images: "data/segmentation/val/images", masks: "data/segmentation/val/masks"}
+    test: {images: "data/segmentation/test/images", masks: "data/segmentation/test/masks"}
+  # OCR: JSON/JSONL records [{"image":"x.jpg","text":"hello"}].
+  ocr_annotations:
+    train: null
+    val: null
+    test: null
+    image_root: "data/ocr"
+    max_length: 32
+    charset: null
 
 augmentation:
   enabled: true
@@ -71,22 +89,9 @@ training:
   optimizer: "adam"
   loss: "sparse_categorical_crossentropy"
   metrics: ["accuracy"]
-  early_stopping:
-    enabled: true
-    patience: 10
-    monitor: "val_loss"
-    mode: "min"
-    restore_best_weights: true
-  reduce_lr_on_plateau:
-    enabled: true
-    factor: 0.5
-    patience: 5
-    min_lr: 1e-6
-  model_checkpoint:
-    enabled: true
-    monitor: "val_accuracy"
-    mode: "max"
-    save_best_only: true
+  early_stopping: {enabled: true, patience: 10, monitor: "val_loss", mode: "min", restore_best_weights: true}
+  reduce_lr_on_plateau: {enabled: true, factor: 0.5, patience: 5, min_lr: 1e-6}
+  model_checkpoint: {enabled: true, monitor: "val_accuracy", mode: "max", save_best_only: true}
 
 output:
   model_dir: "models"
@@ -96,17 +101,9 @@ output:
   include_optimizer: true
 
 logging:
-  tensorboard:
-    enabled: true
-    log_dir: "logs/tensorboard"
-    histogram_freq: 1
-    write_graph: true
-    write_images: false
-  csv_logger:
-    enabled: true
-    log_dir: "logs/csv"
-  console:
-    level: "INFO"
+  tensorboard: {enabled: true, log_dir: "logs/tensorboard", histogram_freq: 1, write_graph: true, write_images: false}
+  csv_logger: {enabled: true, log_dir: "logs/csv"}
+  console: {level: "INFO"}
 
 inference:
   confidence_threshold: 0.5
