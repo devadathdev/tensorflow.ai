@@ -31,7 +31,6 @@ class ImageDataset:
     def get_statistics(self):
         def stats(s): c=self.count_images(s); return {'total':sum(c.values()),'per_class':c}
         return {'num_classes':self.num_classes,'class_names':self.class_names,'train':stats('train'),'val':stats('val'),'test':stats('test') if self.test_dir else None}
-
 def create_dataset_from_config(config=None):
     from src.config import get_config
     cfg=config or get_config(); d=cfg.dataset; return ImageDataset(d.get('train_dir','data/train'),d.get('val_dir','data/val'),d.get('test_dir','data/test'),tuple(d.get('image_size',[224,224])),d.get('batch_size',32),d.get('shuffle_buffer',1000),d.get('cache_dataset',False),d.get('prefetch_buffer',32))
@@ -52,14 +51,14 @@ def create_ocr_dataset(annotation_file,image_root=None,image_size=(32,256),batch
     for r in rows:
         text=str(r['text']);
         if len(text)>max_length: raise StructuredDatasetError(f'OCR label exceeds max_length={max_length}')
-        images.append(str(root/r['image'])); labels.append([lookup[c] for c in text]+[-1]*(max_length-len(text)))
+        images.append(str(root/r['image'])); labels.append([lookup[c] for c in text]+[0]*(max_length-len(text)))
     def load(ip,y):
         x=tf.io.decode_image(tf.io.read_file(ip),channels=3,expand_animations=False); return tf.image.resize(tf.cast(x,tf.float32),image_size)/255.,tf.cast(y,tf.int32)
     ds=tf.data.Dataset.from_tensor_slices((images,labels)).map(load,num_parallel_calls=tf.data.AUTOTUNE)
     if shuffle: ds=ds.shuffle(len(images),seed=42)
     return ds.batch(batch_size).prefetch(tf.data.AUTOTUNE),charset
 def create_detection_dataset(annotation_file,image_root=None,image_size=(320,320),batch_size=8,num_classes=1,prediction_slots=100,shuffle=False):
-    """COCO loader with deterministic fixed-size target slots for the current SSD head."""
+    """COCO loader with fixed-size targets. Anchor matching remains a separate model concern."""
     coco=_json(Path(annotation_file)); root=Path(image_root) if image_root else Path(annotation_file).parent; images={i['id']:i for i in coco.get('images',[])}; grouped={i:[] for i in images}
     for a in coco.get('annotations',[]):
         if a.get('image_id') in grouped: grouped[a['image_id']].append(a)
