@@ -337,6 +337,25 @@ docker compose up --build
 
 GPU deployment is available through the GPU Docker configuration when the host has a compatible NVIDIA/TensorFlow environment.
 
+## Experimental: DEVA language-model training
+
+This repository now contains a separate CPU-first causal-LLM fine-tuning subsystem. It does not replace or alter TensorVision's existing vision `train.py` pipeline.
+
+See [docs/DEVA_LLM.md](docs/DEVA_LLM.md) for hardware limits, installation, dataset format, training, evaluation, and export instructions.
+
+Quick start (Python 3.10/3.11, dedicated environment):
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-deva.txt
+python train_deva.py --validate-data
+python train_deva.py --evaluate-baseline
+python train_deva.py --train
+python train_deva.py --evaluate
+```
+
+The initial Qwen3-0.6B run uses full-precision CPU weights with standard LoRA, not 4-bit QLoRA. It is a slow research-pipeline pilot; the included examples are smoke-test data, not a useful corpus. 7B–9B training is deferred until GPU compute is available.
+
 ## Engineering Notes
 
 - Configuration instances are independent and do not silently reuse another YAML configuration.
