@@ -17,7 +17,7 @@ Use Python 3.10 or 3.11 in a dedicated virtual environment. Install the CPU PyTo
 ```bash
 python -m venv .venv
 # Windows PowerShell:
-.venv\\Scripts\\Activate.ps1
+.venv\Scripts\Activate.ps1
 # Linux/macOS:
 # source .venv/bin/activate
 
