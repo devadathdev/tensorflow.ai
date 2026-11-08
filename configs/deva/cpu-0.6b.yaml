@@ -4,8 +4,8 @@ project:
   compute: cpu
 
 model:
-  # Qwen3-0.6B is the initial pilot candidate. Verify its current model card/license
-  # before downloading or redistributing weights.
+  # Qwen3-0.6B is the initial pilot candidate (751.6M parameters).
+  # Review the upstream model card/license before downloading or redistribution.
   name: Qwen/Qwen3-0.6B
   max_length: 512
 
@@ -21,8 +21,6 @@ training:
   weight_decay: 0.01
   gradient_checkpointing: true
   logging_steps: 1
-  eval_steps: 10
-  save_steps: 10
 
 lora:
   rank: 4
