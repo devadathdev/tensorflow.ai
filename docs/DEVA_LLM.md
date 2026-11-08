@@ -4,15 +4,15 @@ This subsystem is additive. The existing TensorVision image-classification, dete
 
 ## Honest compute constraints
 
-The configured initial checkpoint is Qwen3-0.6B. On CPU, loading full-precision weights alone requires roughly 2.4 GB for 0.6B parameters, before tokenizer, activations, gradients, optimizer state, Python, and operating-system overhead. CPU LoRA is possible but slow; this pilot is for pipeline validation, not rapid iteration. The sample corpus is only a smoke-test fixture and cannot produce a capable assistant.
+The Hugging Face model card reports Qwen/Qwen3-0.6B at approximately 751.6 million parameters. In FP32, weights alone therefore occupy about 3.0 GB (decimal), before tokenizer, activations, gradients, optimizer state, Python, and operating-system overhead. CPU LoRA is possible but slow; this pilot is for pipeline validation, not rapid iteration. The sample corpus is only a smoke-test fixture and cannot produce a capable assistant.
 
-Do not attempt 7B–9B CPU fine-tuning on a typical laptop. Even FP32 weights alone require approximately 28–36 GB, before training overhead. A later 7B–9B stage should use a suitable multi-GPU/cloud environment or a rigorously tested inference-only quantized deployment. CPU-only training remains the requested constraint for the initial 0.6B experiment.
+Do not attempt 7B–9B CPU fine-tuning on a typical laptop. Even FP32 weights alone require approximately 28–36 GB, before training overhead. A later 7B–9B stage should use suitable GPU compute. CPU-only training remains the requested constraint for the initial 0.6B experiment.
 
 QLoRA via bitsandbytes 4-bit quantization is not enabled in this CPU configuration. It is generally a CUDA-oriented workflow. This project uses standard LoRA adapters with full-precision CPU base weights.
 
 ## Install
 
-Use Python 3.10 or 3.11 in a dedicated virtual environment. TensorFlow and PyTorch can have platform-specific wheel constraints; install the CPU-compatible PyTorch wheel for your OS first if the generic resolver selects an unsuitable build.
+Use Python 3.10 or 3.11 in a dedicated virtual environment. Install the CPU PyTorch wheel explicitly, then install the remaining project dependencies:
 
 ```bash
 python -m venv .venv
@@ -22,10 +22,11 @@ python -m venv .venv
 # source .venv/bin/activate
 
 python -m pip install --upgrade pip
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements-deva.txt
 ```
 
-If TensorFlow is already installed in the TensorVision environment, retain its tested version rather than upgrading it blindly. The DEVA data module uses `tf.data.TextLineDataset` for streaming JSONL when that optional path is called; model optimization is performed by PyTorch/Transformers/PEFT.
+If TensorFlow is already installed in the TensorVision environment, retain its tested version rather than upgrading it blindly. The DEVA data module uses `tf.data.TextLineDataset` to stream JSONL records; model optimization is performed by PyTorch/Transformers/PEFT.
 
 ## Data
 
@@ -48,7 +49,7 @@ python train_deva.py --export
 
 The baseline and adapter evaluation report evaluation loss and perplexity on the configured validation set. Perplexity is a token-level metric and does not prove instruction-following quality; add task-specific held-out tests before claiming improvement. Keep a separate test set for final comparisons.
 
-The first run downloads the configured Hugging Face checkpoint and requires network access and enough disk space. Set `HF_HOME` to a drive with sufficient free space if necessary. Review the exact checkpoint's model card and license before use or redistribution.
+The first run downloads the configured checkpoint and requires network access and enough disk space. Set `HF_HOME` to a drive with sufficient free space if necessary. Review the exact checkpoint's model card and license before use or redistribution. The current model card identifies the Qwen3-0.6B checkpoint as Apache-2.0 licensed; re-check upstream terms before redistribution.
 
 ## Outputs
 
@@ -57,7 +58,7 @@ The first run downloads the configured Hugging Face checkpoint and requires netw
 - `artifacts/metrics/adapter.json`: fine-tuned evaluation.
 - `artifacts/deva-core-0.6b-merged/`: optional merged model export.
 
-Never commit downloaded base weights, adapters, private datasets, tokens, or credentials to Git. Use the model registry or object storage with access controls for real artifacts.
+Never commit downloaded base weights, adapters, private datasets, tokens, or credentials to Git. Use a model registry or object storage with access controls for real artifacts.
 
 ## Thara integration
 
