@@ -5,14 +5,14 @@ import json
 import math
 from pathlib import Path
 
-from src.deva.data import read_jsonl, record_to_text
+from src.deva.data import iter_tensorflow_jsonl, record_to_text
 
 
 class JsonlTextDataset:
-    """Small, deterministic dataset adapter compatible with HF Trainer."""
+    """Small deterministic tokenized dataset compatible with HF Trainer."""
     def __init__(self, path, tokenizer, max_length=512):
         self.examples = []
-        for record in read_jsonl(path):
+        for record in iter_tensorflow_jsonl(path):
             text = record_to_text(record)
             if text.startswith('{"messages":'):
                 messages = json.loads(text)["messages"]
@@ -108,7 +108,6 @@ def train_lora(config: dict):
 
 
 def evaluate_model(config: dict, adapter: bool = False):
-    import math
     from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling
     from src.deva.model import load_base_model, load_tokenizer
 
@@ -145,7 +144,6 @@ def evaluate_model(config: dict, adapter: bool = False):
 
 
 def export_merged(config: dict):
-    from pathlib import Path
     from peft import PeftModel
     from src.deva.model import load_base_model, load_tokenizer
 
