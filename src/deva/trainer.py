@@ -21,7 +21,7 @@ class JsonlTextDataset:
                         messages, tokenize=False, add_generation_prompt=False
                     )
                 else:
-                    text = "\\n".join(f"{m['role']}: {m['content']}" for m in messages)
+                    text = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
             encoded = tokenizer(
                 text,
                 truncation=True,
@@ -67,7 +67,6 @@ def train_lora(config: dict):
     args = TrainingArguments(
         output_dir=str(out),
         use_cpu=True,
-        no_cuda=True,
         num_train_epochs=config["training"]["epochs"],
         per_device_train_batch_size=config["training"]["batch_size"],
         per_device_eval_batch_size=1,
@@ -75,10 +74,8 @@ def train_lora(config: dict):
         learning_rate=config["training"]["learning_rate"],
         weight_decay=config["training"].get("weight_decay", 0.01),
         logging_steps=config["training"].get("logging_steps", 10),
-        eval_strategy="steps",
-        eval_steps=config["training"].get("eval_steps", 50),
-        save_strategy="steps",
-        save_steps=config["training"].get("save_steps", 50),
+        eval_strategy="epoch",
+        save_strategy="epoch",
         save_total_limit=2,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
@@ -121,7 +118,6 @@ def evaluate_model(config: dict, adapter: bool = False):
     args = TrainingArguments(
         output_dir=config["output"]["metrics_dir"],
         use_cpu=True,
-        no_cuda=True,
         per_device_eval_batch_size=1,
         report_to="none",
         dataloader_num_workers=0,
