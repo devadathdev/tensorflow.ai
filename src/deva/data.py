@@ -43,17 +43,37 @@ def read_jsonl(path: str | Path) -> Iterator[dict]:
             yield record
 
 
+def iter_tensorflow_jsonl(path: str | Path) -> Iterator[dict]:
+    """Use tf.data to stream JSONL records; fall back to stdlib when TF is absent."""
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Dataset file not found: {path}")
+    try:
+        import tensorflow as tf
+    except ImportError:
+        yield from read_jsonl(path)
+        return
+
+    dataset = tf.data.TextLineDataset(str(path))
+    dataset = dataset.filter(lambda line: tf.strings.length(tf.strings.strip(line)) > 0)
+    for line_no, raw_line in enumerate(dataset.as_numpy_iterator(), 1):
+        try:
+            record = json.loads(raw_line.decode("utf-8"))
+            record_to_text(record)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            raise ValueError(f"{path}: streamed record {line_no}: {exc}") from exc
+        yield record
+
+
 def validate_jsonl(path: str | Path) -> dict:
-    count = 0
-    for _ in read_jsonl(path):
-        count += 1
+    count = sum(1 for _ in read_jsonl(path))
     if count == 0:
         raise ValueError(f"Dataset is empty: {path}")
     return {"path": str(path), "records": count, "valid": True}
 
 
 def tensorflow_text_batches(path: str | Path, batch_size: int = 32):
-    """Stream raw JSONL lines with tf.data; TensorFlow is optional for data-only tests."""
+    """Expose batched tf.data text lines for preprocessing and inspection."""
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
     import tensorflow as tf
