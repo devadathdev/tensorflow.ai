@@ -1,0 +1,11 @@
+# Install in a separate environment from TensorVision if dependency conflicts occur.
+# CPU-only baseline; CUDA/bitsandbytes are intentionally not required.
+tensorflow>=2.15
+torch>=2.4
+transformers>=4.48,<5
+peft>=0.14
+accelerate>=1.2
+datasets>=3.2
+PyYAML>=6.0
+safetensors>=0.4
+pytest>=8.0
